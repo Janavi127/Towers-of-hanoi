@@ -1,14 +1,18 @@
 from collections import deque
+import random
 
-N_DISKS = 3
+REG_NO = 15217
+N_DISKS = 3 + (sum(int(d) for d in str(REG_NO)) % 3)
 PEGS = ("A", "B", "C")
 
 class TowerOfHanoi:
-    def __init__(self, n_disks=N_DISKS):
-        self.n = n_disks
-        self.start = (tuple(range(self.n, 0, -1)), (), ())
-        self.goal = ((), (), tuple(range(self.n, 0, -1)))
+    def __init__(self):
+        random.seed(REG_NO)
         self.moves = [(i, j) for i in range(3) for j in range(3) if i != j]
+        random.shuffle(self.moves)
+        
+        self.start = (tuple(range(N_DISKS, 0, -1)), (), ())
+        self.goal = ((), (), tuple(range(N_DISKS, 0, -1)))
 
     def get_neighbors(self, state):
         for src, dst in self.moves:
@@ -39,4 +43,5 @@ class TowerOfHanoi:
 if __name__ == "__main__":
     game = TowerOfHanoi()
     path = game.bfs()
+    print(f"Register: {REG_NO} | Disks: {N_DISKS}")
     print(f"BFS Solution found in {len(path)} moves.")
