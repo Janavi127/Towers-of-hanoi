@@ -1,0 +1,30 @@
+TOWER OF HANOI - TEST CASES
+
+Test Case 1:
+ Number of Disks = 4
+ Check the number of disks calculated from the register number.
+Expected: 4 disks
+
+
+Test Case 2:
+ Number of Disks = 4, Search = BFS
+Hint: BFS should find the shortest path.
+Expected: 15 moves (Optimal)
+
+
+Test Case 3:
+ Number of Disks = 4, Search = DFS
+Hint: DFS should find a valid solution.
+Expected: Solution found
+
+
+Test Case 4:
+Input: Number of Disks = 4, Start = A, Goal = C
+Hint: Move all disks from peg A to peg C.
+Expected: All 4 disks transferred from A to C
+
+
+Test Case 5:
+Input: Number of Disks = 4
+Hint: Each disk can be placed on any of the 3 pegs.
+Expected: Total States = 81
