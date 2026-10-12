@@ -1,162 +1,98 @@
-import pytest
-from src.main import (
-    TowerOfHanoi, Action, Container,
-    applicable, apply_action, plan,
-    hanoi_domain, blocks_domain,
-    compatible, solve, to_stacks,
-    generate_containers, N_DISKS, REG_NO
-)
+
+import io, os, random, sys, unittest
+from contextlib import redirect_stdout
+sys.path[:0] = [os.path.join(os.path.dirname(__file__), p) for p in ("..", "../src")]
+import main as m
 
 
-def test_register():
-    assert REG_NO == 15217
-    assert N_DISKS in (3, 4, 5)
+class TestSearch(unittest.TestCase):
+    def test_bfs_optimal_dfs_valid(self):
+        g = m.TowerOfHanoi()
+        for mode in ("bfs", "dfs"):                      # path must be legal and reach the goal
+            state = g.start
+            for src, dst, disk in g.search(mode)[0]:
+                self.assertEqual(state[src][-1], disk)
+                self.assertTrue(not state[dst] or state[dst][-1] > disk)
+                new = [list(p) for p in state]
+                new[dst].append(new[src].pop())
+                state = tuple(map(tuple, new))
+            self.assertEqual(state, g.goal)
+        with self.assertRaises(ValueError):
+            g.search("astar")
+
+    def test_bfs_always_optimal_whatever_move_order(self):
+        lengths = set()
+        for seed in range(6):                            # BFS never changes; DFS can
+            g = m.TowerOfHanoi()
+            random.Random(seed).shuffle(g.moves)
+            self.assertEqual(len(g.search("bfs")[0]), 2 ** m.N_DISKS - 1)
+            lengths.add(len(g.search("dfs")[0]))
+        self.assertGreaterEqual(min(lengths), 2 ** m.N_DISKS - 1)
 
 
-def test_bfs():
-    path, nodes = TowerOfHanoi().search("bfs")
-    assert len(path) == 2 ** N_DISKS - 1
-    assert nodes > 0
+class TestPlanner(unittest.TestCase):
+    def test_strips_hanoi_matches_optimal(self):
+        for n in (1, 2, 3):
+            init, goal, acts = m.hanoi_domain(n)
+            self.assertEqual(len(m.plan(init, goal, acts)[0]), 2 ** n - 1)
+
+    def test_blocks_tower(self):
+        names = ["A", "B", "C"]
+        init, goal, acts = m.blocks_domain([[x] for x in names], [names])
+        self.assertEqual(len(m.plan(init, goal, acts)[0]), 4)
+
+    def test_illegal_action_and_bad_input(self):
+        act = m.Action("Go", ("x",), frozenset({1}), frozenset({2}), frozenset({1}))
+        with self.assertRaises(ValueError):
+            m.apply_action(frozenset(), act)
+        with self.assertRaises(ValueError):
+            m.blocks_domain([["A"], ["A"]], [["A"]])
+
+    def test_arm_limit_blocks_heavy_lift(self):
+        w = {"A": 5, "B": 20}
+        init, goal, acts = m.blocks_domain([["A"], ["B"]], [["A", "B"]], w, 10)
+        self.assertIsNone(m.plan(init, goal, acts)[0])       # B cannot be lifted
+        init, goal, acts = m.blocks_domain([["A"], ["B"]], [["A", "B"]], w, 100)
+        with redirect_stdout(io.StringIO()), self.assertRaises(RuntimeError):
+            m.show_robot_plan(init, goal, acts, w, 10)       # runtime safety gate
 
 
-def test_dfs():
-    path, nodes = TowerOfHanoi().search("dfs")
-    assert path is not None
-    assert nodes > 0
+class TestCSP(unittest.TestCase):
+    def test_solutions_are_valid(self):
+        cs = m.generate_containers(12)
+        for fc, mrv in ((False, False), (True, False), (True, True)):
+            sol, _ = m.solve(cs, 4, 3, fc, mrv)
+            stacks = m.to_stacks(cs, sol, 4)
+            by = {c.name: c for c in cs}
+            for s in stacks:
+                self.assertLessEqual(len(s), 3)
+                self.assertLessEqual(sum(by[n].hazardous for n in s), 1)
+
+    def test_fc_and_mrv_reduce_search(self):
+        cs = m.generate_containers(18)
+        t = [m.solve(cs, 5, 4, fc, mrv)[1]["assignments_tried"]
+             for fc, mrv in ((False, False), (True, False), (True, True))]
+        self.assertGreater(t[0], t[1])
+        self.assertGreater(t[1], t[2])
+
+    def test_infeasible_and_bad_args(self):
+        self.assertIsNone(m.solve(m.generate_containers(7), 2, 3)[0])
+        with self.assertRaises(ValueError):
+            m.solve([], 0, 3)
 
 
-def test_invalid_search():
-    with pytest.raises(ValueError):
-        TowerOfHanoi().search("invalid")
+class TestPipeline(unittest.TestCase):
+    def test_end_to_end_reaches_goal(self):
+        cs = m.generate_containers(6)
+        goal_stacks = m.to_stacks(cs, m.solve(cs, 3, 3, True, True)[0], 3)
+        w = {c.name: c.weight for c in cs}
+        init, goal, acts = m.blocks_domain([[c.name] for c in cs], goal_stacks, w, 9)
+        steps, _ = m.plan(init, goal, acts)
+        state = frozenset(init)
+        for a in steps:
+            state = m.apply_action(state, a)
+        self.assertTrue(frozenset(goal) <= state)
 
 
-def test_hanoi_domain():
-    initial, goal, actions = hanoi_domain(N_DISKS)
-    assert initial
-    assert goal
-    assert actions
-
-
-def test_invalid_hanoi():
-    with pytest.raises(ValueError):
-        hanoi_domain(0)
-
-
-def test_action_applicability():
-    action = Action(
-        "Move", ("A", "B"),
-        frozenset({("At", "A")}),
-        frozenset({("At", "B")}),
-        frozenset({("At", "A")})
-    )
-    assert applicable({("At", "A")}, action)
-    assert not applicable({("At", "C")}, action)
-
-
-def test_apply_action():
-    action = Action(
-        "Move", ("A", "B"),
-        frozenset({("At", "A")}),
-        frozenset({("At", "B")}),
-        frozenset({("At", "A")})
-    )
-    result = apply_action({("At", "A")}, action)
-    assert ("At", "B") in result
-    assert ("At", "A") not in result
-
-
-def test_illegal_action():
-    action = Action(
-        "Move", ("A", "B"),
-        frozenset({("At", "A")}),
-        frozenset({("At", "B")}),
-        frozenset({("At", "A")})
-    )
-    with pytest.raises(ValueError):
-        apply_action({("At", "C")}, action)
-
-
-def test_strips_plan():
-    action = Action(
-        "Move", ("A", "B"),
-        frozenset({("At", "A")}),
-        frozenset({("At", "B")}),
-        frozenset({("At", "A")})
-    )
-    steps, nodes = plan({("At", "A")}, {("At", "B")}, [action])
-    assert steps == [action]
-    assert nodes > 0
-
-
-def test_blocks_domain():
-    initial, goal, actions = blocks_domain(
-        [["A"], ["B"]], [["A", "B"]]
-    )
-    assert ("On", "B", "A") in goal
-    assert any(a.name == "Pickup" for a in actions)
-    assert any(a.name == "Stack" for a in actions)
-
-
-def test_robot_safety():
-    _, _, actions = blocks_domain(
-        [["A"]], [["A"]],
-        weights={"A": 12}, arm_limit=10
-    )
-    assert not any(
-        a.name in ("Pickup", "Unstack") for a in actions
-    )
-
-
-def test_invalid_arm_limit():
-    with pytest.raises(ValueError):
-        blocks_domain([["A"]], [["A"]], arm_limit=-1)
-
-
-def test_duplicate_blocks():
-    with pytest.raises(ValueError):
-        blocks_domain([["A"], ["A"]], [["A"]])
-
-
-def test_compatible_containers():
-    a = Container("A", 8, 5)
-    b = Container("B", 4, 2)
-    assert compatible(a, b)
-
-
-def test_hazardous_containers():
-    a = Container("A", 5, 3, True)
-    b = Container("B", 4, 2, True)
-    assert not compatible(a, b)
-
-
-def test_csp_assignment():
-    containers = [
-        Container("A", 5, 1),
-        Container("B", 4, 2),
-        Container("C", 3, 3),
-        Container("D", 2, 4)
-    ]
-    assignment, stats = solve(containers, 2, 2, True, True)
-    assert assignment is not None
-    assert len(assignment) == 4
-    stacks = to_stacks(containers, assignment, 2)
-    assert all(len(s) <= 2 for s in stacks)
-
-
-def test_csp_insufficient_capacity():
-    containers = [
-        Container("A", 2, 1),
-        Container("B", 3, 2),
-        Container("C", 4, 3)
-    ]
-    assignment, _ = solve(containers, 1, 2)
-    assert assignment is None
-
-
-def test_csp_invalid_stacks():
-    with pytest.raises(ValueError):
-        solve([], 0, 2)
-
-
-def test_generate_containers():
-    assert generate_containers(5, 123) == generate_containers(5, 123)
+if __name__ == "__main__":
+    unittest.main()
