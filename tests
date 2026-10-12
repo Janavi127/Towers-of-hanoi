@@ -1,30 +1,162 @@
-TOWER OF HANOI - TEST CASES
-
-Test Case 1:
- Number of Disks = 4
- Check the number of disks calculated from the register number.
-Expected: 4 disks
-
-
-Test Case 2:
- Number of Disks = 4, Search = BFS
-Hint: BFS should find the shortest path.
-Expected: 15 moves (Optimal)
+import pytest
+from src.main import (
+    TowerOfHanoi, Action, Container,
+    applicable, apply_action, plan,
+    hanoi_domain, blocks_domain,
+    compatible, solve, to_stacks,
+    generate_containers, N_DISKS, REG_NO
+)
 
 
-Test Case 3:
- Number of Disks = 4, Search = DFS
-Hint: DFS should find a valid solution.
-Expected: Solution found
+def test_register():
+    assert REG_NO == 15217
+    assert N_DISKS in (3, 4, 5)
 
 
-Test Case 4:
-Input: Number of Disks = 4, Start = A, Goal = C
-Hint: Move all disks from peg A to peg C.
-Expected: All 4 disks transferred from A to C
+def test_bfs():
+    path, nodes = TowerOfHanoi().search("bfs")
+    assert len(path) == 2 ** N_DISKS - 1
+    assert nodes > 0
 
 
-Test Case 5:
-Input: Number of Disks = 4
-Hint: Each disk can be placed on any of the 3 pegs.
-Expected: Total States = 81
+def test_dfs():
+    path, nodes = TowerOfHanoi().search("dfs")
+    assert path is not None
+    assert nodes > 0
+
+
+def test_invalid_search():
+    with pytest.raises(ValueError):
+        TowerOfHanoi().search("invalid")
+
+
+def test_hanoi_domain():
+    initial, goal, actions = hanoi_domain(N_DISKS)
+    assert initial
+    assert goal
+    assert actions
+
+
+def test_invalid_hanoi():
+    with pytest.raises(ValueError):
+        hanoi_domain(0)
+
+
+def test_action_applicability():
+    action = Action(
+        "Move", ("A", "B"),
+        frozenset({("At", "A")}),
+        frozenset({("At", "B")}),
+        frozenset({("At", "A")})
+    )
+    assert applicable({("At", "A")}, action)
+    assert not applicable({("At", "C")}, action)
+
+
+def test_apply_action():
+    action = Action(
+        "Move", ("A", "B"),
+        frozenset({("At", "A")}),
+        frozenset({("At", "B")}),
+        frozenset({("At", "A")})
+    )
+    result = apply_action({("At", "A")}, action)
+    assert ("At", "B") in result
+    assert ("At", "A") not in result
+
+
+def test_illegal_action():
+    action = Action(
+        "Move", ("A", "B"),
+        frozenset({("At", "A")}),
+        frozenset({("At", "B")}),
+        frozenset({("At", "A")})
+    )
+    with pytest.raises(ValueError):
+        apply_action({("At", "C")}, action)
+
+
+def test_strips_plan():
+    action = Action(
+        "Move", ("A", "B"),
+        frozenset({("At", "A")}),
+        frozenset({("At", "B")}),
+        frozenset({("At", "A")})
+    )
+    steps, nodes = plan({("At", "A")}, {("At", "B")}, [action])
+    assert steps == [action]
+    assert nodes > 0
+
+
+def test_blocks_domain():
+    initial, goal, actions = blocks_domain(
+        [["A"], ["B"]], [["A", "B"]]
+    )
+    assert ("On", "B", "A") in goal
+    assert any(a.name == "Pickup" for a in actions)
+    assert any(a.name == "Stack" for a in actions)
+
+
+def test_robot_safety():
+    _, _, actions = blocks_domain(
+        [["A"]], [["A"]],
+        weights={"A": 12}, arm_limit=10
+    )
+    assert not any(
+        a.name in ("Pickup", "Unstack") for a in actions
+    )
+
+
+def test_invalid_arm_limit():
+    with pytest.raises(ValueError):
+        blocks_domain([["A"]], [["A"]], arm_limit=-1)
+
+
+def test_duplicate_blocks():
+    with pytest.raises(ValueError):
+        blocks_domain([["A"], ["A"]], [["A"]])
+
+
+def test_compatible_containers():
+    a = Container("A", 8, 5)
+    b = Container("B", 4, 2)
+    assert compatible(a, b)
+
+
+def test_hazardous_containers():
+    a = Container("A", 5, 3, True)
+    b = Container("B", 4, 2, True)
+    assert not compatible(a, b)
+
+
+def test_csp_assignment():
+    containers = [
+        Container("A", 5, 1),
+        Container("B", 4, 2),
+        Container("C", 3, 3),
+        Container("D", 2, 4)
+    ]
+    assignment, stats = solve(containers, 2, 2, True, True)
+    assert assignment is not None
+    assert len(assignment) == 4
+    stacks = to_stacks(containers, assignment, 2)
+    assert all(len(s) <= 2 for s in stacks)
+
+
+def test_csp_insufficient_capacity():
+    containers = [
+        Container("A", 2, 1),
+        Container("B", 3, 2),
+        Container("C", 4, 3)
+    ]
+    assignment, _ = solve(containers, 1, 2)
+    assert assignment is None
+
+
+def test_csp_invalid_stacks():
+    with pytest.raises(ValueError):
+        solve([], 0, 2)
+
+
+def test_generate_containers():
+    assert generate_containers(5, 123) == generate_containers(5, 123)
