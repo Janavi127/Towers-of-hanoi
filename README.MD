@@ -1,86 +1,66 @@
-# Tower of Hanoi 
+# Tower of Hanoi Search Model → Robotic Container-Stacking Planner
 
 ## Project Description
-The **Tower of Hanoi State Space Search** project is a Python program that solves the classic Tower of Hanoi puzzle using two uninformed graph search algorithms: **Breadth-First Search (BFS)** and **Depth-First Search (DFS)**.
+This project extends the classic **Tower of Hanoi State Space Search** into a **Robotic Container-Stacking Planner**. It is a Python program that combines four AI techniques in one pipeline:
 
-The program represents each peg configuration as a state, explores the state space using both search strategies, and compares them on:
+- **Uninformed search** – BFS and DFS on Tower of Hanoi
+- **STRIPS planning** – a generic planner for Hanoi and Blocks World (robot arm)
+- **Constraint Satisfaction (CSP)** – backtracking, forward checking and MRV to decide which stack each container goes on
+- **Safety checking and explanation** – the arm never lifts an overweight container, and every action is explained
 
-- Path length (number of moves)
-- Number of nodes expanded
-- Whether the solution found is optimal
+**Registration No.:** 15217 (in the code; used to seed the random move order and set the number of disks)
 
-**Registration No.:** 15217
+## Objective
+To show how a basic state-space search model grows into a practical planner, and to compare:
 
-##  Objective
-The main objective of this project is to demonstrate **uninformed state-space graph search** using Python, and to compare BFS and DFS on the same problem.
+- BFS vs DFS (path length, nodes expanded, optimality)
+- STRIPS planning vs plain BFS on the same Hanoi problem
+- Plain backtracking vs forward checking vs forward checking + MRV (assignments tried, runtime)
 
-The program evaluates search strategies based on:
+## Planning Agent Concept
+**States / Percepts**
+- Hanoi: configuration of disks on pegs A, B, C
+- Robot arm: a set of facts such as `On(x,y)`, `OnTable(x)`, `Clear(x)`, `Holding(x)`, `ArmEmpty`
 
-- **Branching Factor** – how many valid moves are available from a state.
-- **Search Depth** – how many moves deep the goal is found.
-- **Node Expansion** – how many states each algorithm visits before finding the goal.
+**Actions**
+- Hanoi: `Move(disk, from, to)` if the target is empty or has a larger top disk
+- Robot arm: `Pickup`, `Putdown`, `Stack`, `Unstack`
 
-##  Search Agent Concept
-A search agent explores a state space to find a path from an initial state to a goal state.
+**Goal Test**
+- Hanoi: all disks on peg C
+- Container stacking: all stack relations chosen by the CSP are true
 
-In this project:
+**Path Cost**
+- Every action costs 1; BFS therefore returns the plan with the fewest actions. For `N` disks the minimum is `2^N − 1` moves (15 for `N = 4`), and the state space has `3^N` states (81 for `N = 4`).
 
-**States / Percepts:**
-- Current configuration of disks across Peg A, Peg B, and Peg C
+## CSP Rules for Stacking
+- Two hazardous containers never share a stack
+- Heavier containers go below lighter ones that depart no earlier: `(w1 − w2)(t1 − t2) ≥ 0`
+- A stack cannot exceed its maximum height
+- Containers heavier than the arm limit are never picked up (no `Pickup`/`Unstack` action is generated, and the plan runner re-checks every step)
 
-**Actions:**
-- Move the top disk of any non-empty peg onto another peg, if that peg is empty or its top disk is larger
+## Technologies Used
+- Python 3 (standard library only: `random`, `time`, `collections.deque`, `dataclasses`)
+- Tuples and frozensets (immutable states)
+- Queue (BFS) and stack (DFS)
+- Backtracking, forward checking, MRV heuristic
 
-**Goal Test:**
-- All disks are stacked in order on Peg C → `((), (), (4, 3, 2, 1))`
-
-**Search Strategy:**
-- BFS explores the state space level by level (FIFO queue)
-- DFS explores one branch deeply before backtracking (stack)
-- A `visited` set is used in both to avoid revisiting states
-
-##  Path Cost Calculation
-Each move has a uniform cost of 1. The total path cost is the number of moves taken to reach the goal.
-
-**Example**
-
-For `N = 4` disks:
-- Theoretical minimum moves = `2^N − 1 = 15`
-- Total reachable states = `3^N = 81`
-
+## Project Structure
 ```
-BFS Path Cost = 15 (optimal)
-DFS Path Cost = 27 (sub-optimal)
-```
-
-##  Technologies Used
-- Python 3
-- Tuples (for immutable state representation)
-- Queue (BFS) and Stack (DFS)
-- Sets (visited-state tracking)
-- Functions and loops
-- Basic complexity analysis
-
-##  Project Structure
-```
-Tower-of-Hanoi-Search/
+Tower-of-Hanoi-Container-Planner/
 │
 ├── src/
-│   └── hanoi_search.py
+│   └── main.py
 │
 ├── tests/
-│   └── test_hanoi_search.py
+│   └── test_main.py
 │
 └── README.md
 ```
-If your Python file is currently in the root folder instead of `src/`, move it into the `src` folder to match the required project structure.
 
-##  How to Run
+## How to Run
 
-**1. Install Python**
-Make sure Python 3 is installed on your computer.
-
-Check the Python version:
+**1. Check Python**
 ```
 python --version
 ```
@@ -88,113 +68,107 @@ python --version
 **2. Clone the Repository**
 ```
 git clone YOUR_GITHUB_REPOSITORY_URL
+cd Tower-of-Hanoi-Container-Planner
 ```
 
-**3. Open the Project**
+**3. Run the Program**
 ```
-cd Tower-of-Hanoi-Search
-```
-
-**4. Run the Program**
-If the file is inside `src`:
-```
-python src/hanoi_search.py
+python src/main.py
 ```
 
-##  Sample Input
+**4. Run the Tests**
 ```
-Enter number of disks: 4
+python -m unittest discover tests
 ```
 
-##  Sample Output
+## Sample Output
 ```
-Register: 15217 | Disks: 4 | Total States: 81
-BFS: 15 moves (Optimal) | Expanded Nodes: 81
-DFS: 27 moves           | Expanded Nodes: 31
+Register: 15217 | Disks: 4 | States: 81
+BFS: 15 moves (optimal), nodes=81
+DFS: 15 moves, nodes=16
 
-========== SHORTEST SOLUTION STEPS (BFS) ==========
+Hanoi via STRIPS: 15 moves, 68 nodes
+Hanoi via BFS:    15 moves, 81 nodes (lengths should match)
 
-Step  1: Move Disk 1 from A to B
-Step  2: Move Disk 2 from A to C
-...
-Step 15: Move Disk 1 from B to C
+blocks   plan    nodes
+     3      4       19
+     4      6      108
+     5      8      771
+
+  n stacks plain tried  FC tried   FC+MRV
+ 12      4          12        12       12
+ 18      5         603       264       18
+ 18      6         590       419       18
+
+CSP stack assignment (bottom -> top): [['C5', 'C2', 'C1'], ['C4', 'C3'], ['C6']]
+Robot plan: 6 actions
+Goal verified: all required stack relations are satisfied.
 ```
-The exact expanded-node count for DFS depends on the move ordering used in the implementation.
+Runtimes are also printed and vary by machine; the counts above are deterministic. DFS's result depends on the move ordering, so it is not guaranteed to be optimal.
 
-##  Working Process
+## Working Process
 ```
 Start
   ↓
-Enter number of disks (N)
+Compute disks N from the register number
   ↓
-Generate initial state ((N,...,2,1), (), ())
+Solve Hanoi with BFS and DFS → compare moves and nodes
   ↓
-Run BFS: explore level by level
+Solve Hanoi with the STRIPS planner → compare with BFS
   ↓
-Run DFS: explore depth-first with backtracking
+Run Blocks World scaling (3, 4, 5 blocks)
   ↓
-Track visited states to avoid cycles
+Compare CSP methods: plain / forward checking / FC + MRV
   ↓
-Record path length and expanded nodes for each
+Generate containers → CSP chooses goal stacks
   ↓
-Compare BFS and DFS results
-  ↓
-Display move sequence and metrics
+STRIPS planner builds the arm plan → safety check → explanation
   ↓
 End
 ```
 
 ## Features
-- Solves Tower of Hanoi for any number of disks (N)
-- Implements both BFS and DFS as graph search (not tree search)
-- Prevents infinite loops using a visited-state set
-- Calculates and displays total reachable state space (`3^N`)
-- Compares optimality, path length, and nodes expanded
-- Displays the full optimal move sequence from BFS
+- BFS (optimal) and DFS with a visited set (graph search)
+- Generic STRIPS planner with an explanation for every step
+- Hanoi and Blocks World action domains with input validation
+- CSP solver with forward checking and optional MRV
+- Robot-arm weight limit enforced twice (when generating actions and when running the plan)
+- Comparison experiments with assignments tried and runtime
 
-##  Search Comparison Rules
+## Comparison Summary
 | Factor | BFS | DFS |
 |---|---|---|
-| Exploration order | Level by level | Deepest branch first |
 | Optimality | Guaranteed | Not guaranteed |
-| Nodes expanded | Higher (explores full space) | Lower (stops at first goal found) |
-| Memory usage | Higher (stores full frontier) | Lower (stores current path) |
+| Nodes expanded (N = 4) | 81 | 16 |
+| Memory | Higher | Lower |
 
-BFS therefore guarantees the shortest solution, while DFS may reach a solution faster in terms of nodes expanded but with a longer path.
+| CSP method | Idea | Assignments (18 containers, 5 stacks) |
+|---|---|---|
+| Plain backtracking | Try values in order | 603 |
+| Forward checking | Remove conflicting values early | 264 |
+| FC + MRV | Also pick the most constrained container first | 18 |
 
-##  Limitations
-This is a basic uninformed-search implementation. Some limitations are:
+## Limitations
+- BFS over fact sets grows quickly as the number of containers rises
+- The arm holds one container at a time; no travel cost or crane geometry
+- Test instances are small and randomly generated
+- No graphical visualisation
 
-- Only practical for small values of N, since the state space grows as `3^N`
-- DFS solution quality depends heavily on move ordering
-- No heuristic is used, so search is not goal-directed
-- Does not visualize the peg movements graphically
-- Only supports the standard 3-peg Tower of Hanoi variant
-
-##  Future Enhancements
-Possible improvements include:
-
-- Add A* search with an admissible heuristic for comparison
-- Add iterative deepening DFS (IDDFS)
-- Visualize disk movements with a GUI or animation
-- Support the 4-peg (Frame–Stewart) variant
-- Track and plot runtime alongside expanded nodes
-- Add unit tests for state transitions and goal checking
+## Future Enhancements
+- A* search with a heuristic for the planner
+- Multiple arms and movement-time costs
+- Graphical simulation of the container yard
+- Runtime plots for larger inputs
 
 ## Learning Outcomes
-Through this project, the following concepts are demonstrated:
-
-- Python programming
-- State-space representation using tuples
-- Graph search vs tree search
-- BFS and DFS implementation
-- Cycle avoidance using visited sets
-- Optimality proofs for uniform-cost search
-- Time and space complexity analysis (Big-O)
+- State-space search (BFS, DFS) and optimality
+- STRIPS planning with preconditions and effects
+- Constraint satisfaction with forward checking and MRV
+- Safety constraints and explainable plans
+- Writing unit tests for AI algorithms
 
 ## 👨‍💻 Author
 janavi.v
 
 ## 📄 License
 This project is created for academic/educational purposes.
-
